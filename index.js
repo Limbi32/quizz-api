@@ -514,7 +514,7 @@ app.post("/api/payment/paydunya/init", async (req, res) => {
           "PAYDUNYA-PRIVATE-KEY": process.env.PAYDUNYA_PRIVATE_KEY,
           "PAYDUNYA-PUBLIC-KEY": process.env.PAYDUNYA_PUBLIC_KEY,
           "PAYDUNYA-TOKEN": process.env.PAYDUNYA_TOKEN,
-          "PAYDUNYA-MODE": "test", // ✅ Forcé en test
+          "PAYDUNYA-MODE": "live", // ✅ Forcé en test
         },
         body: JSON.stringify({
           invoice: {
