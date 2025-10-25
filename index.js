@@ -668,6 +668,115 @@ app.post("/api/register/finalize", async (req, res) => {
   }
 });
 
+// ---------------- REGISTER REQUEST ----------------
+app.post("/api/register-request", async (req, res) => {
+  try {
+    const { nom, prenom, phone, password, date_naissance, pays, nationalite, role, secretKey } = req.body;
+    if (!nom || !prenom || !phone || !password || !date_naissance || !pays || !nationalite) {
+      return res.status(400).json({ error: "Tous les champs sont requis" });
+    }
+
+    // Vérifie si le numéro existe déjà dans users ou register_requests
+    const { data: existingUser } = await supabase
+      .from("users")
+      .select("id")
+      .eq("phone", phone)
+      .single();
+    const { data: existingRequest } = await supabase
+      .from("register_requests")
+      .select("id")
+      .eq("phone", phone)
+      .single();
+    if (existingUser || existingRequest) {
+      return res.status(400).json({ error: "Numéro déjà utilisé ou demande en attente" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const { data, error } = await supabase
+      .from("register_requests")
+      .insert([{
+        nom, prenom, phone, password: hashedPassword, date_naissance, pays, nationalite, role, secretKey, status: "pending"
+      }])
+      .select();
+
+    if (error) return res.status(500).json({ error });
+
+    return res.status(201).json({ message: "Demande enregistrée avec succès", request: data[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+// ---------------- ADMIN APPROVE / REJECT ----------------
+app.get("/api/admin/register-requests", verifyAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("register_requests")
+      .select("*")
+      .eq("status", "pending");
+    if (error) return res.status(400).json({ error });
+    return res.json({ requests: data });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+app.post("/api/admin/register-requests/:id/approve", verifyAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { data: request, error } = await supabase
+      .from("register_requests")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (error || !request) return res.status(404).json({ error: "Demande introuvable" });
+
+    // Crée l'utilisateur
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .insert([{
+        nom: request.nom,
+        prenom: request.prenom,
+        phone: request.phone,
+        password: request.password,
+        date_naissance: request.date_naissance,
+        pays: request.pays,
+        nationalite: request.nationalite,
+        role: request.role
+      }])
+      .select();
+    if (userError) return res.status(500).json({ error: userError });
+
+    // Met à jour la demande
+    await supabase
+      .from("register_requests")
+      .update({ status: "approved" })
+      .eq("id", id);
+
+    return res.json({ message: "Utilisateur créé avec succès", user: userData[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+app.post("/api/admin/register-requests/:id/reject", verifyAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { data, error } = await supabase
+      .from("register_requests")
+      .update({ status: "rejected" })
+      .eq("id", id);
+    if (error) return res.status(500).json({ error });
+    return res.json({ message: "Demande rejetée" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
 
 // ---------------- SERVER ----------------
 app.listen(PORT, () => console.log(`✅ API démarrée sur http://localhost:${PORT}`));
