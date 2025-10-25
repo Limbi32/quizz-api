@@ -505,7 +505,7 @@ app.post("/api/payment/paydunya/init", async (req, res) => {
 
     // ✅ Construction de la requête vers PayDunya Sandbox
     const response = await fetch(
-      "https://app.paydunya.com/sandbox-api/v1/checkout-invoice/create",
+      "https://app.paydunya.com/api/v1/checkout-invoice/create",
       {
         method: "POST",
         headers: {
