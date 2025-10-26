@@ -819,27 +819,9 @@ app.post("/api/save-result", async (req, res) => {
   try {
     const { user_id, matiere_id, matiere, score, total, answers } = req.body;
 
-    console.log("📝 Requête reçue pour save-result :", req.body);
-
-    // Validation des champs
-    if (!user_id) {
-      return res.status(400).json({ error: "user_id manquant" });
+    if (!matiere || score == null || total == null || !answers) {
+      return res.status(400).json({ error: "Champs manquants" });
     }
-    if (!matiere_id) {
-      return res.status(400).json({ error: "matiere_id manquant" });
-    }
-    if (!matiere) {
-      return res.status(400).json({ error: "matiere manquante" });
-    }
-    if (score == null || total == null) {
-      return res.status(400).json({ error: "score ou total manquant" });
-    }
-    if (!answers) {
-      return res.status(400).json({ error: "answers manquant" });
-    }
-
-    // Assurer que answers est JSON
-    const answersData = typeof answers === "string" ? JSON.parse(answers) : answers;
 
     const percentage = Math.round((score / total) * 100);
 
@@ -848,26 +830,21 @@ app.post("/api/save-result", async (req, res) => {
       .insert([
         {
           user_id,
-          matiere_id,
+          matiere_id: matiere_id || null, // accepte null
           matiere,
           score,
           total,
           percentage,
-          answers: answersData,
+          answers,
         },
       ])
       .select();
 
-    if (error) {
-      console.error("❌ Erreur Supabase :", error);
-      return res.status(500).json({ error: "Erreur Supabase lors de l'insertion" });
-    }
-
-    console.log("✅ Résultat enregistré :", data[0]);
+    if (error) throw error;
     return res.status(201).json({ message: "Résultat enregistré", result: data[0] });
   } catch (err) {
-    console.error("💥 Erreur serveur :", err);
-    return res.status(500).json({ error: "Erreur serveur lors de l'enregistrement du résultat" });
+    console.error(err);
+    return res.status(500).json({ error: "Erreur lors de l'enregistrement du résultat" });
   }
 });
 
