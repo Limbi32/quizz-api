@@ -668,44 +668,82 @@ app.post("/api/register/finalize", async (req, res) => {
   }
 });
 
-// ---------------- REGISTER REQUEST ----------------
 app.post("/api/register-request", async (req, res) => {
   try {
-    const { nom, prenom, phone, password, date_naissance, pays, nationalite, role, secretKey } = req.body;
+    const { nom, prenom, phone, password, date_naissance, pays, nationalite, secretKey } = req.body;
+
+    // ✅ Validation des champs
     if (!nom || !prenom || !phone || !password || !date_naissance || !pays || !nationalite) {
-      return res.status(400).json({ error: "Tous les champs sont requis" });
+      return res.status(400).json({ error: "Tous les champs sont requis." });
     }
 
-    // Vérifie si le numéro existe déjà dans users ou register_requests
-    const { data: existingUser } = await supabase
+    // ✅ Validation du format du numéro
+    const phoneRegex = /^\+\d{6,15}$/;
+    if (!phoneRegex.test(phone)) {
+      return res.status(400).json({ error: "Numéro de téléphone invalide." });
+    }
+
+    // ✅ Vérification du rôle (admin ou user)
+    let role = "user";
+    if (secretKey && secretKey === process.env.ADMIN_SECRET_KEY) {
+      role = "admin";
+    }
+
+    // ✅ Vérifie si le numéro existe déjà dans users
+    const { data: existingUser, error: userError } = await supabase
       .from("users")
       .select("id")
       .eq("phone", phone)
-      .single();
-    const { data: existingRequest } = await supabase
+      .maybeSingle();
+
+    if (userError) throw userError;
+    if (existingUser) {
+      return res.status(400).json({ error: "Ce numéro est déjà enregistré." });
+    }
+
+    // ✅ Vérifie si une demande en attente existe déjà
+    const { data: existingRequest, error: requestError } = await supabase
       .from("register_requests")
       .select("id")
       .eq("phone", phone)
-      .single();
-    if (existingUser || existingRequest) {
-      return res.status(400).json({ error: "Numéro déjà utilisé ou demande en attente" });
+      .maybeSingle();
+
+    if (requestError) throw requestError;
+    if (existingRequest) {
+      return res.status(400).json({ error: "Une demande est déjà en attente pour ce numéro." });
     }
 
+    // ✅ Hash du mot de passe
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // ✅ Insertion dans register_requests
     const { data, error } = await supabase
       .from("register_requests")
-      .insert([{
-        nom, prenom, phone, password: hashedPassword, date_naissance, pays, nationalite, role, secretKey, status: "pending"
-      }])
-      .select();
+      .insert([
+        {
+          nom,
+          prenom,
+          phone,
+          password: hashedPassword,
+          date_naissance,
+          pays,
+          nationalite,
+          role,
+          status: "pending",
+        },
+      ])
+      .select()
+      .single();
 
-    if (error) return res.status(500).json({ error });
+    if (error) throw error;
 
-    return res.status(201).json({ message: "Demande enregistrée avec succès", request: data[0] });
+    return res.status(201).json({
+      message: "Demande enregistrée avec succès.",
+      request: data,
+    });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    console.error("Erreur lors de l'enregistrement :", err);
+    return res.status(500).json({ error: "Erreur serveur. Veuillez réessayer plus tard." });
   }
 });
 
