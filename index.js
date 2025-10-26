@@ -816,5 +816,47 @@ app.post("/api/admin/register-requests/:id/reject", verifyAdmin, async (req, res
   }
 });
 
+app.post("/api/save-result", async (req, res) => {
+  try {
+    const { user_id, matiere_id, matiere, score, total, answers } = req.body;
+
+    if (!matiere || !score || !total || !answers) {
+      return res.status(400).json({ error: "Champs manquants" });
+    }
+
+    const percentage = Math.round((score / total) * 100);
+
+    const { data, error } = await supabase
+      .from("quiz_results")
+      .insert([
+        {
+          user_id,
+          matiere_id,
+          matiere,
+          score,
+          total,
+          percentage,
+          answers,
+        },
+      ])
+      .select();
+
+    if (error) throw error;
+    return res.status(201).json({ message: "Résultat enregistré", result: data[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur lors de l'enregistrement du résultat" });
+  }
+});
+
+app.get("/api/results", async (req, res) => {
+  const { data, error } = await supabase
+    .from("quiz_results")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) return res.status(500).json({ error });
+  return res.json(data);
+});
 // ---------------- SERVER ----------------
 app.listen(PORT, () => console.log(`✅ API démarrée sur http://localhost:${PORT}`));
