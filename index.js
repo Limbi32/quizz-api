@@ -73,23 +73,30 @@ app.get("/api/me", verifyToken, async (req, res) => {
 // ===================== GESTION DES UTILISATEURS =====================
 app.get("/api/users", async (req, res) => {
   try {
-    // Enlève "email" qui n'existe pas dans ta table users
-    const { data, error } = await supabase
-      .from("users")
-      .select("id, nom, prenom, phone, role, is_active");
+    console.log("-> /api/users called");
+
+    // Essaye d'abord toutes les colonnes pour vérifier ce que Supabase renvoie
+    const { data, error } = await supabase.from("users").select("*");
 
     if (error) {
       console.error("Supabase select error /api/users:", error);
-      return res.status(400).json({ error: error.message || error });
+      // renvoie l'objet d'erreur complet pour debug (côté dev)
+      return res.status(400).json({ error });
     }
 
-    return res.json({ users: data });
+    // Supprime le champ password avant d'envoyer
+    const safeUsers = (data || []).map(u => {
+      const { password, ...rest } = u;
+      return rest;
+    });
+
+    console.log(`/api/users -> found ${safeUsers.length} users`);
+    return res.json({ users: safeUsers });
   } catch (err) {
     console.error("Server error /api/users:", err);
     return res.status(500).json({ error: "Erreur serveur" });
   }
 });
-
 
 app.get("/api/admin/users", verifyAdmin, async (req, res) => {
   try {
