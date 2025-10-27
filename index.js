@@ -133,7 +133,7 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-aapp.post("/api/login", async (req, res) => {
+app.post("/api/login", async (req, res) => {
   try {
     const { phone, password } = req.body;
     const { data, error } = await supabase.from("users").select("*").eq("phone", phone).single();
