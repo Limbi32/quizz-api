@@ -161,6 +161,10 @@ app.post("/api/login", async (req, res) => {
 
     const user = data[0];
 
+    if (user.is_active === false) {
+  return res.status(403).json({ error: "Ce compte a été désactivé par un administrateur" });
+}
+
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       console.log("Mot de passe incorrect pour:", normalizedPhone);
@@ -815,13 +819,18 @@ app.post("/api/admin/register-requests/:id/reject", verifyAdmin, async (req, res
     return res.status(500).json({ error: "Erreur serveur" });
   }
 });
+
 app.post("/api/save-result", async (req, res) => {
   try {
     const { user_id, matiere_id, matiere, score, total, answers } = req.body;
 
+    // Vérification des champs obligatoires
     if (!matiere || score == null || total == null || !answers) {
       return res.status(400).json({ error: "Champs manquants" });
     }
+
+    // Vérification matiere_id
+    const matiereIdInt = matiere_id ? parseInt(matiere_id, 10) : null;
 
     const percentage = Math.round((score / total) * 100);
 
@@ -829,24 +838,26 @@ app.post("/api/save-result", async (req, res) => {
       .from("quiz_results")
       .insert([
         {
-          user_id,
-          matiere_id: matiere_id || null, // accepte null
+          user_id,               // UUID utilisateur
+          matiere_id: matiereIdInt, // integer
           matiere,
           score,
           total,
           percentage,
-          answers,
+          answers,               // JSONB
         },
       ])
       .select();
 
     if (error) throw error;
+
     return res.status(201).json({ message: "Résultat enregistré", result: data[0] });
   } catch (err) {
-    console.error(err);
+    console.error("Erreur API save-result:", err);
     return res.status(500).json({ error: "Erreur lors de l'enregistrement du résultat" });
   }
 });
+
 
 
 app.get("/api/results", async (req, res) => {
@@ -858,5 +869,39 @@ app.get("/api/results", async (req, res) => {
   if (error) return res.status(500).json({ error });
   return res.json(data);
 });
+
+// ---------------- ACTIVER / DÉSACTIVER UN UTILISATEUR ----------------
+app.put("/api/admin/users/:id/toggle", verifyAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    // Récupérer l'état actuel
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("is_active")
+      .eq("id", userId)
+      .single();
+
+    if (userError || !user) return res.status(404).json({ error: "Utilisateur non trouvé" });
+
+    const newStatus = !user.is_active;
+
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ is_active: newStatus })
+      .eq("id", userId);
+
+    if (updateError) return res.status(400).json({ error: updateError });
+
+    return res.json({
+      message: `Utilisateur ${newStatus ? "réactivé" : "désactivé"} avec succès`,
+      is_active: newStatus,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur lors de la désactivation" });
+  }
+});
+
 // ---------------- SERVER ----------------
 app.listen(PORT, () => console.log(`✅ API démarrée sur http://localhost:${PORT}`));
