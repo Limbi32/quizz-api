@@ -59,38 +59,25 @@ function verifyToken(req, res, next) {
     return res.status(500).json({ error: "Erreur serveur auth" });
   }
 }
-
-// ---------------- CURRENT USER ----------------
+// ===================== UTILISATEUR CONNECTÉ =====================
 app.get("/api/me", verifyToken, async (req, res) => {
   try {
-    const userId = req.user.id;
-
-    const { data, error } = await supabase
-      .from("users")
-      .select("id, nom, prenom, phone") // ✅ on choisit seulement les colonnes utiles
-      .eq("id", userId)
-      .single();
-
-    if (error || !data) {
-      return res.status(404).json({ error: "Utilisateur non trouvé" });
-    }
-
-    return res.json({ user: data }); // ✅ on renvoie les 4 champs attendus
+    const { data, error } = await supabase.from("users").select("*").eq("id", req.user.id).single();
+    if (error) return res.status(404).json({ error: "Utilisateur non trouvé" });
+    res.json({ user: data });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-// ---------------- USERS ----------------
+// ===================== GESTION DES UTILISATEURS =====================
 app.get("/api/users", async (req, res) => {
   try {
-    const { data, error } = await supabase.from("users").select("*");
+    const { data, error } = await supabase.from("users").select("id, nom, prenom, phone, role, email, is_active");
     if (error) return res.status(400).json({ error });
-    return res.json({ users: data });
+    res.json({ users: data });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
@@ -105,95 +92,70 @@ app.get("/api/admin/users", verifyAdmin, async (req, res) => {
   }
 });
 
-// ---------------- REGISTER & LOGIN ----------------
+/// ===================== REGISTER / LOGIN =====================
 app.post("/api/register", async (req, res) => {
   try {
-    const { nom, prenom, phone, password, date_naissance, pays, nationalite, role, secretKey } = req.body;
-    if (!nom || !prenom || !phone || !password || !date_naissance || !pays || !nationalite) {
-      return res.status(400).json({ error: "Tous les champs sont requis" });
-    }
+    const { nom, prenom, phone, password, role = "user" } = req.body;
+    if (!nom || !prenom || !phone || !password)
+      return res.status(400).json({ error: "Champs requis manquants" });
 
-    const { data: existingUser } = await supabase
-      .from("users")
-      .select("id")
-      .eq("phone", phone)
-      .single();
-    if (existingUser) return res.status(400).json({ error: "Numéro déjà utilisé" });
+    // Vérifier doublon
+    const { data: existing } = await supabase.from("users").select("id").eq("phone", phone).single();
+    if (existing) return res.status(400).json({ error: "Ce numéro est déjà utilisé" });
 
-    let finalRole = "user";
-    if (role === "admin") {
-      if (secretKey !== process.env.ADMIN_SECRET) return res.status(403).json({ error: "Code secret admin invalide" });
-      finalRole = "admin";
-    }
+    const hashed = await bcrypt.hash(password, 10);
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Si admin => active direct, sinon demande en attente
+    const is_active = role === "admin";
+
     const { data, error } = await supabase
       .from("users")
-      .insert([{ nom, prenom, phone, password: hashedPassword, date_naissance, pays, nationalite, role: finalRole }])
+      .insert([
+        {
+          id: uuidv4(),
+          nom,
+          prenom,
+          phone,
+          password: hashed,
+          role,
+          is_active,
+          approved: is_active,
+          pending_approval: !is_active,
+        },
+      ])
       .select();
-    if (error) return res.status(500).json({ error });
 
-    return res.status(201).json({ message: "Utilisateur créé", user: data[0] });
+    if (error) return res.status(500).json({ error });
+    return res.status(201).json({ message: "Inscription en attente de validation", user: data[0] });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-app.post("/api/login", async (req, res) => {
+aapp.post("/api/login", async (req, res) => {
   try {
     const { phone, password } = req.body;
-    if (!phone || !password)
-      return res.status(400).json({ error: "Numéro et mot de passe requis" });
+    const { data, error } = await supabase.from("users").select("*").eq("phone", phone).single();
 
-    const normalizedPhone = phone.trim().replace(/\s+/g, "");
+    if (error || !data) return res.status(404).json({ error: "Utilisateur non trouvé" });
+    if (!data.is_active) return res.status(403).json({ error: "Compte en attente d'approbation" });
 
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .ilike("phone", normalizedPhone) // tolère majuscules et minuscules
-      .limit(1);
-
-    if (error || !data || data.length === 0) {
-      console.log("Utilisateur non trouvé:", normalizedPhone);
-      return res.status(404).json({ error: "Utilisateur non trouvé" });
-    }
-
-    const user = data[0];
-
-    if (user.is_active === false) {
-  return res.status(403).json({ error: "Ce compte a été désactivé par un administrateur" });
-}
-
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) {
-      console.log("Mot de passe incorrect pour:", normalizedPhone);
-      return res.status(401).json({ error: "Mot de passe incorrect" });
-    }
+    const valid = await bcrypt.compare(password, data.password);
+    if (!valid) return res.status(401).json({ error: "Mot de passe incorrect" });
 
     const token = jwt.sign(
-      { id: user.id, phone: user.phone, role: user.role },
+      { id: data.id, role: data.role, phone: data.phone },
       process.env.JWT_SECRET || "SECRET_KEY",
       { expiresIn: "7d" }
     );
 
-    return res.json({
-      message: "Connexion réussie",
-      token,
-      user: {
-        id: user.id,
-        nom: user.nom,
-        prenom: user.prenom,
-        phone: user.phone,
-        role: user.role,
-      },
-    });
+    res.json({ token, user: data });
   } catch (err) {
-    console.error("Erreur login:", err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    console.error(err);
+    res.status(500).json({ error: "Erreur login" });
   }
 });
-
 
 // ---------------- CRUD MATIERES ----------------
 app.get("/api/admin/matieres", verifyAdmin, async (req, res) => {
@@ -751,72 +713,45 @@ app.post("/api/register-request", async (req, res) => {
   }
 });
 
-// ---------------- ADMIN APPROVE / REJECT ----------------
+// ===================== GESTION ADMIN : DEMANDES D'INSCRIPTION =====================
+
 app.get("/api/admin/register-requests", verifyAdmin, async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from("register_requests")
+      .from("users")
       .select("*")
-      .eq("status", "pending");
-    if (error) return res.status(400).json({ error });
-    return res.json({ requests: data });
+      .eq("pending_approval", true);
+
+    if (error) return res.status(500).json({ error });
+    res.json({ requests: data });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
 app.post("/api/admin/register-requests/:id/approve", verifyAdmin, async (req, res) => {
   try {
-    const id = req.params.id;
-    const { data: request, error } = await supabase
-      .from("register_requests")
-      .select("*")
-      .eq("id", id)
-      .single();
-    if (error || !request) return res.status(404).json({ error: "Demande introuvable" });
-
-    // Crée l'utilisateur
-    const { data: userData, error: userError } = await supabase
+    const { id } = req.params;
+    const { data, error } = await supabase
       .from("users")
-      .insert([{
-        nom: request.nom,
-        prenom: request.prenom,
-        phone: request.phone,
-        password: request.password,
-        date_naissance: request.date_naissance,
-        pays: request.pays,
-        nationalite: request.nationalite,
-        role: request.role
-      }])
+      .update({ is_active: true, pending_approval: false, approved: true })
+      .eq("id", id)
       .select();
-    if (userError) return res.status(500).json({ error: userError });
 
-    // Met à jour la demande
-    await supabase
-      .from("register_requests")
-      .update({ status: "approved" })
-      .eq("id", id);
-
-    return res.json({ message: "Utilisateur créé avec succès", user: userData[0] });
+    if (error) return res.status(500).json({ error });
+    res.json({ message: "Utilisateur approuvé", user: data[0] });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
-
 app.post("/api/admin/register-requests/:id/reject", verifyAdmin, async (req, res) => {
   try {
-    const id = req.params.id;
-    const { data, error } = await supabase
-      .from("register_requests")
-      .update({ status: "rejected" })
-      .eq("id", id);
+    const { id } = req.params;
+    const { error } = await supabase.from("users").delete().eq("id", id);
     if (error) return res.status(500).json({ error });
-    return res.json({ message: "Demande rejetée" });
+    res.json({ message: "Demande refusée et supprimée" });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
@@ -870,73 +805,7 @@ app.get("/api/results", async (req, res) => {
   return res.json(data);
 });
 
-// ---------------- ACTIVER / DÉSACTIVER UN UTILISATEUR ----------------
-app.put("/api/admin/users/:id/toggle", verifyAdmin, async (req, res) => {
-  try {
-    const userId = req.params.id;
 
-    // Récupérer l'état actuel
-    const { data: user, error: userError } = await supabase
-      .from("users")
-      .select("is_active")
-      .eq("id", userId)
-      .single();
-
-    if (userError || !user) return res.status(404).json({ error: "Utilisateur non trouvé" });
-
-    const newStatus = !user.is_active;
-
-    const { error: updateError } = await supabase
-      .from("users")
-      .update({ is_active: newStatus })
-      .eq("id", userId);
-
-    if (updateError) return res.status(400).json({ error: updateError });
-
-    return res.json({
-      message: `Utilisateur ${newStatus ? "réactivé" : "désactivé"} avec succès`,
-      is_active: newStatus,
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Erreur serveur lors de la désactivation" });
-  }
-});
-
-// ================= ACTIVER / DESACTIVER UTILISATEUR =================
-app.put("/api/admin/users/:id/activate", verifyAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { data, error } = await supabase
-      .from("users")
-      .update({ is_active: true })
-      .eq("id", id)
-      .select();
-
-    if (error) return res.status(400).json({ error });
-    return res.json({ message: "Utilisateur activé", user: data[0] });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Erreur serveur" });
-  }
-});
-
-app.put("/api/admin/users/:id/deactivate", verifyAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { data, error } = await supabase
-      .from("users")
-      .update({ is_active: false })
-      .eq("id", id)
-      .select();
-
-    if (error) return res.status(400).json({ error });
-    return res.json({ message: "Utilisateur désactivé", user: data[0] });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Erreur serveur" });
-  }
-});
 
 // ---------------- SERVER ----------------
 app.listen(PORT, () => console.log(`✅ API démarrée sur http://localhost:${PORT}`));
