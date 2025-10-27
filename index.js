@@ -73,7 +73,7 @@ app.get("/api/me", verifyToken, async (req, res) => {
 // ===================== GESTION DES UTILISATEURS =====================
 app.get("/api/users", async (req, res) => {
   try {
-    const { data, error } = await supabase.from("users").select("id, nom, prenom, phone, role, email, is_actif");
+    const { data, error } = await supabase.from("users").select("id, nom, prenom, phone, role, email, is_active");
     if (error) return res.status(400).json({ error });
     res.json({ users: data });
   } catch (err) {
@@ -118,9 +118,9 @@ app.post("/api/register", async (req, res) => {
           phone,
           password: hashed,
           role,
-          is_actif,
-          approved: is_actif,
-          pending_approval: !is_actif,
+          is_active,
+          approved: is_active,
+          pending_approval: !is_active,
         },
       ])
       .select();
