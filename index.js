@@ -153,26 +153,61 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const { phone, password } = req.body;
-    const { data, error } = await supabase.from("users").select("*").eq("phone", phone).single();
 
-    if (error || !data) return res.status(404).json({ error: "Utilisateur non trouvé" });
-    if (!data.is_active) return res.status(403).json({ error: "Compte en attente d'approbation" });
+    // Vérifie les champs
+    if (!phone || !password)
+      return res.status(400).json({ error: "Téléphone et mot de passe requis" });
 
-    const valid = await bcrypt.compare(password, data.password);
-    if (!valid) return res.status(401).json({ error: "Mot de passe incorrect" });
+    // Cherche l'utilisateur
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("phone", phone)
+      .single();
 
+    if (error || !user)
+      return res.status(404).json({ error: "Utilisateur non trouvé" });
+
+    // ✅ Vérifie si le compte est désactivé
+    if (user.is_active === false) {
+      return res.status(403).json({
+        error: "Votre compte a été désactivé. Veuillez contacter l’administrateur.",
+      });
+    }
+
+    // ✅ Vérifie si le compte est en attente d’approbation
+    if (user.approved === false && user.pending_approval === true) {
+      return res.status(403).json({
+        error: "Votre compte est en attente d’approbation par un administrateur.",
+      });
+    }
+
+    // Vérifie le mot de passe
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid)
+      return res.status(401).json({ error: "Mot de passe incorrect" });
+
+    // Génère le token JWT
     const token = jwt.sign(
-      { id: data.id, role: data.role, phone: data.phone },
+      { id: user.id, role: user.role, phone: user.phone },
       process.env.JWT_SECRET || "SECRET_KEY",
       { expiresIn: "7d" }
     );
 
-    res.json({ token, user: data });
+    // Supprime le mot de passe du retour
+    const { password: _, ...safeUser } = user;
+
+    return res.json({
+      message: "Connexion réussie",
+      token,
+      user: safeUser,
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erreur login" });
+    console.error("Erreur login:", err);
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
+
 
 // ---------------- CRUD MATIERES ----------------
 app.get("/api/admin/matieres", verifyAdmin, async (req, res) => {
