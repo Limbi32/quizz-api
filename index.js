@@ -805,6 +805,47 @@ app.get("/api/results", async (req, res) => {
   return res.json(data);
 });
 
+// Activer un utilisateur
+app.post("/api/admin/users/:id/activate", verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from("users")
+      .update({ is_active: true })
+      .eq("id", id)
+      .select();
+
+    if (error) return res.status(500).json({ error });
+    if (!data.length) return res.status(404).json({ error: "Utilisateur non trouvé" });
+
+    return res.json({ message: "Utilisateur activé", user: data[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+// Désactiver un utilisateur
+app.post("/api/admin/users/:id/deactivate", verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from("users")
+      .update({ is_active: false })
+      .eq("id", id)
+      .select();
+
+    if (error) return res.status(500).json({ error });
+    if (!data.length) return res.status(404).json({ error: "Utilisateur non trouvé" });
+
+    return res.json({ message: "Utilisateur désactivé", user: data[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
 
 
 // ---------------- SERVER ----------------
