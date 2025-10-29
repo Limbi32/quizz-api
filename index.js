@@ -346,6 +346,18 @@ app.post("/api/admin/matieres/:id/classes", verifyAdmin, async (req, res) => {
   }
 });
 
+// Supprimer une question
+app.delete("/api/admin/questions/:id", verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { error } = await supabase.from("questions").delete().eq("id", id);
+    if (error) return res.status(400).json({ error });
+    return res.json({ message: "Question supprimée" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
 app.get("/api/classes/:id/cours", verifyToken, async (req, res) => {
   try {
     const classe_id = req.params.id;
