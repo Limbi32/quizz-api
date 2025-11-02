@@ -236,12 +236,21 @@ app.post("/api/admin/matieres", verifyAdmin, async (req, res) => {
   }
 });
 
-// ---------------- CRUD QUESTIONS ----------------
-app.get("/api/admin/matieres/:id/questions", verifyAdmin, async (req, res) => {
+// ---------------- LISTE DES QUESTIONS PAR SUJET ----------------
+// ---------------- CRUD QUESTIONS PAR SUJET ----------------
+app.get("/api/admin/matieres/:matiere_id/sujets/:sujet_id/questions", verifyAdmin, async (req, res) => {
   try {
-    const matiere_id = req.params.id;
-    const { data, error } = await supabase.from("questions").select("*").eq("matiere_id", matiere_id);
+    const { matiere_id, sujet_id } = req.params;
+
+    const { data, error } = await supabase
+      .from("questions")
+      .select("*")
+      .eq("matiere_id", matiere_id)
+      .eq("sujet_id", sujet_id)
+      .order("id", { ascending: true });
+
     if (error) return res.status(400).json({ error });
+
     return res.json({ questions: data });
   } catch (err) {
     console.error(err);
@@ -249,21 +258,76 @@ app.get("/api/admin/matieres/:id/questions", verifyAdmin, async (req, res) => {
   }
 });
 
-app.post("/api/admin/matieres/:id/questions", verifyAdmin, async (req, res) => {
+
+app.post("/api/admin/matieres/:id/questions", async (req, res) => {
   try {
-    const matiere_id = req.params.id;
-    const { question, reponse, options } = req.body;
-    if (!question || !reponse) return res.status(400).json({ error: "Question et réponse obligatoires" });
+    const matiere_id = parseInt(req.params.id);
+    const { question, reponse, options, sujet_id } = req.body;
 
-    const { data, error } = await supabase.from("questions").insert([{ matiere_id, question, reponse, options }]).select();
-    if (error) return res.status(500).json({ error });
+    // Vérification des champs obligatoires
+    if (!question || !reponse || !sujet_id) {
+      return res.status(400).json({
+        error: "Les champs 'question', 'reponse' et 'sujet_id' sont obligatoires.",
+      });
+    }
 
-    return res.status(201).json({ message: "Question ajoutée", question: data[0] });
+    // Vérifier si la matière existe
+    const { data: matiere, error: matiereError } = await supabase
+      .from("matieres")
+      .select("id")
+      .eq("id", matiere_id)
+      .single();
+
+    if (matiereError || !matiere) {
+      return res.status(404).json({ error: "Matière introuvable." });
+    }
+
+    // Vérifier si le sujet appartient bien à la matière
+    const { data: sujet, error: sujetError } = await supabase
+      .from("sujets")
+      .select("id, matiere_id")
+      .eq("id", sujet_id)
+      .single();
+
+    if (sujetError || !sujet) {
+      return res.status(404).json({ error: "Sujet introuvable." });
+    }
+
+    if (sujet.matiere_id !== matiere_id) {
+      return res.status(400).json({
+        error: "Ce sujet n'appartient pas à la matière spécifiée.",
+      });
+    }
+
+    // Insertion de la question
+    const { data, error } = await supabase
+      .from("questions")
+      .insert([
+        {
+          matiere_id,
+          sujet_id,
+          question,
+          reponse,
+          options: options || null,
+        },
+      ])
+      .select();
+
+    if (error) {
+      console.error("Erreur Supabase :", error.message);
+      return res.status(500).json({ error: "Erreur lors de l'insertion." });
+    }
+
+    return res.status(201).json({
+      message: "Question ajoutée avec succès ✅",
+      question: data[0],
+    });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    console.error("Erreur serveur :", err.message);
+    return res.status(500).json({ error: "Erreur serveur interne." });
   }
 });
+
 
 // ---------------- ROUTES UTILISATEURS ----------------
 app.get("/api/matieres", async (req, res) => {
@@ -912,5 +976,80 @@ app.post("/api/admin/users/:id/deactivate", verifyAdmin, async (req, res) => {
 });
 
 
+
+/**
+ * ➕ Ajouter un sujet pour une matière
+ * POST /api/sujets
+ * Body : { matiere_id, titre, description, ordre }
+ */
+app.post("/sujets", async (req, res) => {
+  try {
+    const { matiere_id, titre, description, ordre } = req.body;
+
+    // Vérification des champs
+    if (!matiere_id || !titre) {
+      return res.status(400).json({
+        error: "Le champ 'matiere_id' et 'titre' sont obligatoires.",
+      });
+    }
+
+    // Vérifier si la matière existe
+    const { data: matiere, error: matiereError } = await supabase
+      .from("matieres")
+      .select("*")
+      .eq("id", matiere_id)
+      .single();
+
+    if (matiereError || !matiere) {
+      return res.status(404).json({ error: "Matière introuvable." });
+    }
+
+    // Insertion du sujet
+    const { data, error } = await supabase
+      .from("sujets")
+      .insert([
+        {
+          matiere_id,
+          titre,
+          description: description || null,
+          ordre: ordre || 1,
+        },
+      ])
+      .select();
+
+    if (error) throw error;
+
+    res.status(201).json({
+      message: "Sujet ajouté avec succès ✅",
+      sujet: data[0],
+    });
+  } catch (error) {
+    console.error("Erreur ajout sujet:", error.message);
+    res.status(500).json({ error: "Erreur interne du serveur." });
+  }
+});
+
+/**
+ * 📄 Lister tous les sujets d'une matière
+ * GET /api/sujets/matiere/:matiere_id
+ */
+app.get("/api/sujets/matiere/:matiere_id", async (req, res) => {
+  try {
+    const { matiere_id } = req.params;
+
+    const { data, error } = await supabase
+      .from("sujets")
+      .select("*")
+      .eq("matiere_id", matiere_id)
+      .order("ordre", { ascending: true });
+
+    if (error) throw error;
+
+    res.json(data);
+  } catch (error) {
+    console.error("Erreur récupération sujets:", error.message);
+    res.status(500).json({ error: "Erreur interne du serveur." });
+  }
+});
 // ---------------- SERVER ----------------
 app.listen(PORT, () => console.log(`✅ API démarrée sur http://localhost:${PORT}`));
