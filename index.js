@@ -556,19 +556,35 @@ app.put("/api/admin/questions/:id", verifyAdmin, async (req, res) => {
     const { id } = req.params;
     const { question, reponse, options } = req.body;
 
+    // Validation basique
+    if (!question || !reponse) {
+      return res.status(400).json({ error: "Le champ 'question' et 'reponse' sont obligatoires." });
+    }
+
+    if (options && !Array.isArray(options)) {
+      return res.status(400).json({ error: "'options' doit être un tableau si fourni." });
+    }
+
+    // Mise à jour dans Supabase
     const { data, error } = await supabase
       .from("questions")
       .update({ question, reponse, options })
       .eq("id", id)
       .select();
 
-    if (error) return res.status(400).json({ error });
-    if (!data.length) return res.status(404).json({ error: "Question non trouvée" });
+    if (error) {
+      console.error("Erreur Supabase:", error);
+      return res.status(500).json({ error: "Erreur lors de la mise à jour de la question." });
+    }
 
-    return res.json({ message: "Question modifiée", question: data[0] });
+    if (!data || data.length === 0) {
+      return res.status(404).json({ error: "Question non trouvée." });
+    }
+
+    return res.json({ message: "Question modifiée avec succès.", question: data[0] });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    console.error("Erreur serveur:", err);
+    return res.status(500).json({ error: "Erreur serveur inattendue." });
   }
 });
 
