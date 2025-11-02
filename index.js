@@ -238,7 +238,7 @@ app.post("/api/admin/matieres", verifyAdmin, async (req, res) => {
 
 // ---------------- LISTE DES QUESTIONS PAR SUJET ----------------
 // ---------------- CRUD QUESTIONS PAR SUJET ----------------
-app.get("/api/admin/matieres/:matiere_id/sujets/:sujet_id/questions", async (req, res) => {
+app.get("/api/admin/matieres/:matiere_id/sujets/:sujet_id/questions",verifyToken, async (req, res) => {
   try {
     const { matiere_id, sujet_id } = req.params;
 
