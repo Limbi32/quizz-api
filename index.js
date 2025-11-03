@@ -988,21 +988,15 @@ app.post("/api/admin/users/:id/deactivate", verifyAdmin, async (req, res) => {
  * POST /api/sujets
  * Body : { matiere_id, titre, description, ordre }
  */
+// ✅ Ajout d'un sujet à une matière
 pp.post("/api/sujets/matiere/:matiere_id", async (req, res) => {
   try {
-    const { matiere_id } = req.params; // récupéré depuis l’URL
-    const { titre, description, ordre } = req.body; // seulement les champs du body
+    const { matiere_id } = req.params; // <-- récupéré depuis l’URL
+    const { titre, description, ordre } = req.body;
 
-    // Vérification des champs
     if (!titre) {
       return res.status(400).json({
         error: "Le champ 'titre' est obligatoire.",
-      });
-    }
-
-    if (!matiere_id) {
-      return res.status(400).json({
-        error: "Le paramètre 'matiere_id' est manquant dans l’URL.",
       });
     }
 
@@ -1022,7 +1016,7 @@ pp.post("/api/sujets/matiere/:matiere_id", async (req, res) => {
       .from("sujets")
       .insert([
         {
-          matiere_id: parseInt(matiere_id),
+          matiere_id: parseInt(matiere_id), // ✅ conversion pour éviter les conflits
           titre,
           description: description || null,
           ordre: ordre || 1,
