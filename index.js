@@ -990,12 +990,13 @@ app.post("/api/admin/users/:id/deactivate", verifyAdmin, async (req, res) => {
  */
 app.post("/api/sujets/matiere/:matiere_id", async (req, res) => {
   try {
-    const { matiere_id, titre, description, ordre } = req.body;
+    const { matiere_id } = req.params; // <-- récupère depuis l’URL
+    const { titre, description, ordre } = req.body;
 
     // Vérification des champs
     if (!matiere_id || !titre) {
       return res.status(400).json({
-        error: "Le champ 'matiere_id' et 'titre' sont obligatoires.",
+        error: "Le champ 'matiere_id' (dans l’URL) et 'titre' (dans le body) sont obligatoires.",
       });
     }
 
@@ -1015,7 +1016,7 @@ app.post("/api/sujets/matiere/:matiere_id", async (req, res) => {
       .from("sujets")
       .insert([
         {
-          matiere_id,
+          matiere_id: parseInt(matiere_id),
           titre,
           description: description || null,
           ordre: ordre || 1,
@@ -1035,10 +1036,6 @@ app.post("/api/sujets/matiere/:matiere_id", async (req, res) => {
   }
 });
 
-/**
- * 📄 Lister tous les sujets d'une matière
- * GET /api/sujets/matiere/:matiere_id
- */
 app.get("/api/sujets/matiere/:matiere_id", async (req, res) => {
   try {
     const { matiere_id } = req.params;
