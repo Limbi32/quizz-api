@@ -988,8 +988,8 @@ app.post("/api/admin/users/:id/deactivate", verifyAdmin, async (req, res) => {
  * POST /api/sujets
  * Body : { matiere_id, titre, description, ordre }
  */
-// ✅ Ajout d'un sujet à une matière
-pp.post("/api/sujets/matiere/:matiere_id", async (req, res) => {
+// ✅ Ajout d'un sujet à une matièrea
+app.post("/api/sujets/matiere/:matiere_id", async (req, res) => {
   try {
     const { matiere_id } = req.params; // <-- récupéré depuis l’URL
     const { titre, description, ordre } = req.body;
