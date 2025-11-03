@@ -341,17 +341,7 @@ app.get("/api/matieres", async (req, res) => {
   }
 });
 
-app.get("/api/matieres/:id/questions", verifyToken, async (req, res) => {
-  try {
-    const matiere_id = req.params.id;
-    const { data, error } = await supabase.from("questions").select("id, question, options, reponse").eq("matiere_id", matiere_id);
-    if (error) return res.status(400).json({ error });
-    return res.json({ questions: data });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Erreur serveur" });
-  }
-});
+
 
 // ---------------- ROUTE MY-MATIERES POUR UTILISATEUR ----------------
 app.get("/api/my-matieres", verifyToken, async (req, res) => {
@@ -998,7 +988,7 @@ app.post("/api/admin/users/:id/deactivate", verifyAdmin, async (req, res) => {
  * POST /api/sujets
  * Body : { matiere_id, titre, description, ordre }
  */
-app.post("/sujets", async (req, res) => {
+app.post("/api/sujets/matiere/:matiere_id", async (req, res) => {
   try {
     const { matiere_id, titre, description, ordre } = req.body;
 
