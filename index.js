@@ -171,7 +171,7 @@ app.post("/api/login", async (req, res) => {
     // ✅ Vérifie si le compte est désactivé
     if (user.is_active === false) {
       return res.status(403).json({
-        error: "Votre compte a été désactivé. Veuillez contacter l’administrateur.",
+        error: "Votre abonnement  a expiré , veuillez le renouveler ou contacter le formateur au 70386420",
       });
     }
 
