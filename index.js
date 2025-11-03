@@ -1055,5 +1055,80 @@ app.get("/api/sujets/matiere/:matiere_id", async (req, res) => {
     res.status(500).json({ error: "Erreur interne du serveur." });
   }
 });
+
+/**
+ * ✏️ Modifier un sujet
+ * PUT /api/sujets/:id
+ */
+app.put("/api/sujets/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { titre, description, ordre } = req.body;
+
+    // Vérifier si le sujet existe
+    const { data: sujet, error: sujetError } = await supabase
+      .from("sujets")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (sujetError || !sujet) {
+      return res.status(404).json({ error: "Sujet introuvable." });
+    }
+
+    // Mise à jour du sujet
+    const { data, error } = await supabase
+      .from("sujets")
+      .update({
+        titre: titre || sujet.titre,
+        description: description || sujet.description,
+        ordre: ordre || sujet.ordre,
+      })
+      .eq("id", id)
+      .select();
+
+    if (error) throw error;
+
+    res.status(200).json({
+      message: "Sujet mis à jour avec succès ✅",
+      sujet: data[0],
+    });
+  } catch (error) {
+    console.error("Erreur modification sujet:", error.message);
+    res.status(500).json({ error: "Erreur interne du serveur." });
+  }
+});
+
+/**
+ * 🗑️ Supprimer un sujet
+ * DELETE /api/sujets/:id
+ */
+app.delete("/api/sujets/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Vérifier si le sujet existe
+    const { data: sujet, error: sujetError } = await supabase
+      .from("sujets")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (sujetError || !sujet) {
+      return res.status(404).json({ error: "Sujet introuvable." });
+    }
+
+    // Suppression du sujet
+    const { error } = await supabase.from("sujets").delete().eq("id", id);
+
+    if (error) throw error;
+
+    res.status(200).json({ message: "Sujet supprimé avec succès 🗑️" });
+  } catch (error) {
+    console.error("Erreur suppression sujet:", error.message);
+    res.status(500).json({ error: "Erreur interne du serveur." });
+  }
+});
+
 // ---------------- SERVER ----------------
 app.listen(PORT, () => console.log(`✅ API démarrée sur http://localhost:${PORT}`));
