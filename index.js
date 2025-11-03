@@ -988,15 +988,21 @@ app.post("/api/admin/users/:id/deactivate", verifyAdmin, async (req, res) => {
  * POST /api/sujets
  * Body : { matiere_id, titre, description, ordre }
  */
-app.post("/api/sujets/matiere/:matiere_id", async (req, res) => {
+pp.post("/api/sujets/matiere/:matiere_id", async (req, res) => {
   try {
-    const { matiere_id } = req.params; // <-- récupère depuis l’URL
-    const { titre, description, ordre } = req.body;
+    const { matiere_id } = req.params; // récupéré depuis l’URL
+    const { titre, description, ordre } = req.body; // seulement les champs du body
 
     // Vérification des champs
-    if (!matiere_id || !titre) {
+    if (!titre) {
       return res.status(400).json({
-        error: "Le champ 'matiere_id' (dans l’URL) et 'titre' (dans le body) sont obligatoires.",
+        error: "Le champ 'titre' est obligatoire.",
+      });
+    }
+
+    if (!matiere_id) {
+      return res.status(400).json({
+        error: "Le paramètre 'matiere_id' est manquant dans l’URL.",
       });
     }
 
@@ -1035,6 +1041,7 @@ app.post("/api/sujets/matiere/:matiere_id", async (req, res) => {
     res.status(500).json({ error: "Erreur interne du serveur." });
   }
 });
+
 
 app.get("/api/sujets/matiere/:matiere_id", async (req, res) => {
   try {
