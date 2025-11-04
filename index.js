@@ -852,16 +852,18 @@ app.post("/api/register-request", async (req, res) => {
 app.get("/api/admin/register-requests", verifyAdmin, async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from("status")
+      .from("register_requests") // 👉 bonne table
       .select("*")
-      .eq("pending", true);
+      .eq("status", "pending"); // 👉 bon champ et bonne valeur
 
     if (error) return res.status(500).json({ error });
     res.json({ requests: data });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
+
 
 app.post("/api/admin/register-requests/:id/approve", verifyAdmin, async (req, res) => {
   try {
