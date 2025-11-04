@@ -868,28 +868,64 @@ app.get("/api/admin/register-requests", verifyAdmin, async (req, res) => {
 app.post("/api/admin/register-requests/:id/approve", verifyAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { data, error } = await supabase
-      .from("users")
-      .update({ is_active: true, pending_approval: false, approved: true })
+
+    // 1️⃣ Récupérer la demande
+    const { data: requestData, error: fetchError } = await supabase
+      .from("register_requests")
+      .select("*")
       .eq("id", id)
+      .single();
+
+    if (fetchError || !requestData) {
+      return res.status(404).json({ error: "Demande introuvable" });
+    }
+
+    // 2️⃣ Créer l'utilisateur dans la table users
+    const { data: userData, error: insertError } = await supabase
+      .from("users")
+      .insert([
+        {
+          nom: requestData.nom,
+          prenom: requestData.prenom,
+          password: requestData.password,
+          date_naissance: requestData.date_naissance,
+          pays: requestData.pays,
+          nationalite: requestData.nationalite,
+          phone: requestData.phone,
+          role: requestData.role,
+          is_active: true,
+          haspaid: false,
+        },
+      ])
       .select();
 
-    if (error) return res.status(500).json({ error });
-    res.json({ message: "Utilisateur approuvé", user: data[0] });
+    if (insertError) return res.status(500).json({ error: insertError });
+
+    // 3️⃣ Supprimer la demande approuvée
+    await supabase.from("register_requests").delete().eq("id", id);
+
+    res.json({ message: "Utilisateur approuvé et ajouté", user: userData[0] });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
+
 app.post("/api/admin/register-requests/:id/reject", verifyAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { error } = await supabase.from("users").delete().eq("id", id);
+
+    // Supprimer la demande dans register_requests
+    const { error } = await supabase.from("register_requests").delete().eq("id", id);
     if (error) return res.status(500).json({ error });
+
     res.json({ message: "Demande refusée et supprimée" });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
+
 
 app.post("/api/save-result", async (req, res) => {
   try {
