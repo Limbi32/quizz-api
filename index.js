@@ -852,7 +852,7 @@ app.post("/api/register-request", async (req, res) => {
 app.get("/api/admin/register-requests", verifyAdmin, async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from("users")
+      .from("status")
       .select("*")
       .eq("pending", true);
 
