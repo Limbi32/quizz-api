@@ -854,7 +854,7 @@ app.get("/api/admin/register-requests", verifyAdmin, async (req, res) => {
     const { data, error } = await supabase
       .from("users")
       .select("*")
-      .eq("pending_approval", true);
+      .eq("pending", true);
 
     if (error) return res.status(500).json({ error });
     res.json({ requests: data });
