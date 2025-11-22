@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import axios from "axios";
+const bcrypt = require("bcryptjs");
 
 
 import { v4 as uuidv4 } from "uuid";
@@ -276,6 +277,51 @@ app.put("/api/update-profile", verifyToken, async (req, res) => {
   }
 });
 
+app.put("/api/change-password", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ error: "Champs manquants" });
+    }
+
+    // 🔍 Récupérer l'utilisateur
+    const { data: user, error: fetchError } = await supabase
+      .from("users")
+      .select("password")
+      .eq("id", userId)
+      .single();
+
+    if (fetchError || !user) {
+      return res.status(404).json({ error: "Utilisateur introuvable" });
+    }
+
+    // ❌ Vérifier ancien mot de passe
+    const match = await bcrypt.compare(oldPassword, user.password);
+    if (!match) {
+      return res.status(400).json({ error: "Ancien mot de passe incorrect" });
+    }
+
+    // 🔐 Hasher nouveau mot de passe
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    // 🔄 Mise à jour
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ password: hashed })
+      .eq("id", userId);
+
+    if (updateError) {
+      return res.status(500).json({ error: "Erreur lors de la mise à jour" });
+    }
+
+    return res.json({ message: "Mot de passe modifié avec succès !" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
 
 // ---------------- CRUD MATIERES ----------------
 app.get("/api/admin/matieres", verifyAdmin, async (req, res) => {
