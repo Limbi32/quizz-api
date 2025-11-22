@@ -208,6 +208,74 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
+// modifier un utilisateur
+
+// ===================== METTRE À JOUR LE PROFIL =====================
+app.put("/api/update-profile", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id; // ID récupéré depuis le JWT
+
+    const {
+      nom,
+      prenom,
+      phone,
+      pays,
+      nationalite,
+      date_naissance
+    } = req.body;
+
+    // 🔍 Vérification données minimales
+    if (!nom || !prenom || !phone) {
+      return res.status(400).json({
+        error: "Les champs nom, prénom et téléphone sont obligatoires"
+      });
+    }
+
+    // 📌 Vérifier si l’utilisateur existe
+    const { data: existingUser, error: fetchError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (fetchError || !existingUser) {
+      return res.status(404).json({ error: "Utilisateur introuvable" });
+    }
+
+    // 📌 Mettre à jour uniquement les champs autorisés
+    const { data, error } = await supabase
+      .from("users")
+      .update({
+        nom,
+        prenom,
+        phone,
+        pays,
+        nationalite,
+        date_naissance
+      })
+      .eq("id", userId)
+      .select();
+
+    if (error) {
+      console.error(error);
+      return res.status(500).json({
+        error: "Erreur lors de la mise à jour du profil"
+      });
+    }
+
+    return res.json({
+      message: "Profil mis à jour avec succès",
+      user: data[0],
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      error: "Erreur serveur"
+    });
+  }
+});
+
 
 // ---------------- CRUD MATIERES ----------------
 app.get("/api/admin/matieres", verifyAdmin, async (req, res) => {
