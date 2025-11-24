@@ -277,6 +277,8 @@ app.put("/api/update-profile", verifyToken, async (req, res) => {
   }
 });
 
+//Pour changer de mot de passe
+
 app.put("/api/change-password", verifyToken, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -286,10 +288,10 @@ app.put("/api/change-password", verifyToken, async (req, res) => {
       return res.status(400).json({ error: "Champs manquants" });
     }
 
-    // 🔍 Récupérer l'utilisateur
+    // 1️⃣ Récupérer les infos de l'utilisateur
     const { data: user, error: fetchError } = await supabase
       .from("users")
-      .select("password")
+      .select("id, password")
       .eq("id", userId)
       .single();
 
@@ -297,26 +299,26 @@ app.put("/api/change-password", verifyToken, async (req, res) => {
       return res.status(404).json({ error: "Utilisateur introuvable" });
     }
 
-    // ❌ Vérifier ancien mot de passe
-    const match = await bcrypt.compare(oldPassword, user.password);
-    if (!match) {
+    // 2️⃣ Vérifier l'ancien mot de passe
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
       return res.status(400).json({ error: "Ancien mot de passe incorrect" });
     }
 
-    // 🔐 Hasher nouveau mot de passe
-    const hashed = await bcrypt.hash(newPassword, 10);
+    // 3️⃣ Hasher le nouveau mot de passe
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // 🔄 Mise à jour
+    // 4️⃣ Mettre à jour
     const { error: updateError } = await supabase
       .from("users")
-      .update({ password: hashed })
+      .update({ password: hashedPassword })
       .eq("id", userId);
 
     if (updateError) {
       return res.status(500).json({ error: "Erreur lors de la mise à jour" });
     }
 
-    return res.json({ message: "Mot de passe modifié avec succès !" });
+    return res.json({ message: "Mot de passe changé avec succès !" });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Erreur serveur" });
