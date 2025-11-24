@@ -76,12 +76,14 @@ app.get("/api/users", async (req, res) => {
   try {
     console.log("-> /api/users called");
 
-    // Essaye d'abord toutes les colonnes pour vérifier ce que Supabase renvoie
-    const { data, error } = await supabase.from("users").select("*");
+    // Récupère uniquement les utilisateurs avec role = "user"
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("role", "user");  // <-- filtrage ici
 
     if (error) {
       console.error("Supabase select error /api/users:", error);
-      // renvoie l'objet d'erreur complet pour debug (côté dev)
       return res.status(400).json({ error });
     }
 
@@ -98,6 +100,7 @@ app.get("/api/users", async (req, res) => {
     return res.status(500).json({ error: "Erreur serveur" });
   }
 });
+
 
 app.get("/api/admin/users", verifyAdmin, async (req, res) => {
   try {
