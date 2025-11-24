@@ -277,6 +277,25 @@ app.put("/api/update-profile", verifyToken, async (req, res) => {
   }
 });
 
+//Pour supprimer un utilisateur 
+app.delete("/api/admin/users/:id", verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from("users")
+      .delete()
+      .eq("id", id);
+
+    if (error) return res.status(500).json({ error });
+
+    res.json({ message: "Utilisateur supprimé" });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 //Pour changer de mot de passe
 
 app.put("/api/change-password", verifyToken, async (req, res) => {
