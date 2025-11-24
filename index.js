@@ -113,18 +113,43 @@ app.get("/api/admin/users", verifyAdmin, async (req, res) => {
 /// ===================== REGISTER / LOGIN =====================
 app.post("/api/register", async (req, res) => {
   try {
-    const { nom, prenom, phone, password, role = "user" } = req.body;
+    const {
+      nom,
+      prenom,
+      phone,
+      password,
+      role = "user"
+    } = req.body;
+
     if (!nom || !prenom || !phone || !password)
       return res.status(400).json({ error: "Champs requis manquants" });
 
     // Vérifier doublon
-    const { data: existing } = await supabase.from("users").select("id").eq("phone", phone).single();
-    if (existing) return res.status(400).json({ error: "Ce numéro est déjà utilisé" });
+    const { data: existing } = await supabase
+      .from("users")
+      .select("id")
+      .eq("phone", phone)
+      .single();
+
+    if (existing)
+      return res.status(400).json({ error: "Ce numéro est déjà utilisé" });
 
     const hashed = await bcrypt.hash(password, 10);
 
-    // Si admin => active direct, sinon demande en attente
+    // Rôle admin = compte activé direct
     const is_active = role === "admin";
+
+    // 🎯 Calcul abonnement 30 jours seulement pour les utilisateurs normaux
+    let abonnement_debut = null;
+    let abonnement_fin = null;
+    let abonnement_status = null;
+
+    if (role === "user") {
+      const now = new Date();
+      abonnement_debut = now.toISOString();
+      abonnement_fin = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      abonnement_status = "actif";
+    }
 
     const { data, error } = await supabase
       .from("users")
@@ -139,27 +164,35 @@ app.post("/api/register", async (req, res) => {
           is_active,
           approved: is_active,
           pending_approval: !is_active,
-        },
+
+          // 🔥 ABONNEMENT AUTOMATIQUE
+          abonnement_debut,
+          abonnement_fin,
+          abonnement_status
+        }
       ])
       .select();
 
     if (error) return res.status(500).json({ error });
-    return res.status(201).json({ message: "Inscription en attente de validation", user: data[0] });
+
+    return res.status(201).json({
+      message: "Inscription réussie avec abonnement de 30 jours",
+      user: data[0]
+    });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
-
 app.post("/api/login", async (req, res) => {
   try {
     const { phone, password } = req.body;
 
-    // Vérifie les champs
     if (!phone || !password)
       return res.status(400).json({ error: "Téléphone et mot de passe requis" });
 
-    // Cherche l'utilisateur
+    // 🔍 Chercher l'utilisateur
     const { data: user, error } = await supabase
       .from("users")
       .select("*")
@@ -169,33 +202,62 @@ app.post("/api/login", async (req, res) => {
     if (error || !user)
       return res.status(404).json({ error: "Utilisateur non trouvé" });
 
-    // ✅ Vérifie si le compte est désactivé
-    if (user.is_active === false) {
-      return res.status(403).json({
-        error: "Votre abonnement  a expiré , veuillez le renouveler ou contacter le formateur au 70386420",
-      });
-    }
+    // 🛑 Vérifie si le mot de passe est correct
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid)
+      return res.status(401).json({ error: "Mot de passe incorrect" });
 
-    // ✅ Vérifie si le compte est en attente d’approbation
+    // 🛑 Vérifie approbation admin
     if (user.approved === false && user.pending_approval === true) {
       return res.status(403).json({
         error: "Votre compte est en attente d’approbation par un administrateur.",
       });
     }
 
-    // Vérifie le mot de passe
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid)
-      return res.status(401).json({ error: "Mot de passe incorrect" });
+    // 🛑 Vérifie si le compte est désactivé
+    if (user.is_active === false) {
+      return res.status(403).json({
+        error:
+          "Votre compte a été désactivé. Contactez le support ou le formateur au 70386420.",
+      });
+    }
 
-    // Génère le token JWT
+    // 📅 Vérifie si l’abonnement a expiré
+    if (user.abonnement_fin) {
+      const now = new Date();
+      const fin = new Date(user.abonnement_fin);
+
+      if (fin < now) {
+        // 🔥 Met automatiquement le statut à expiré
+        await supabase
+          .from("users")
+          .update({ abonnement_status: "expire" })
+          .eq("id", user.id);
+
+        return res.status(403).json({
+          error:
+            "Votre abonnement a expiré. Veuillez le renouveler ou contacter le formateur au 70386420.",
+          abonnement_status: "expire",
+        });
+      }
+    }
+
+    // 🛑 Vérifie si l’abonnement est inactif
+    if (user.abonnement_status !== "actif") {
+      return res.status(403).json({
+        error:
+          "Votre abonnement n'est pas actif. Veuillez le renouveler.",
+      });
+    }
+
+    // 🔐 Génère le token JWT
     const token = jwt.sign(
       { id: user.id, role: user.role, phone: user.phone },
       process.env.JWT_SECRET || "SECRET_KEY",
       { expiresIn: "7d" }
     );
 
-    // Supprime le mot de passe du retour
+    // Masquer le mot de passe avant de renvoyer l’utilisateur
     const { password: _, ...safeUser } = user;
 
     return res.json({
@@ -203,6 +265,7 @@ app.post("/api/login", async (req, res) => {
       token,
       user: safeUser,
     });
+
   } catch (err) {
     console.error("Erreur login:", err);
     res.status(500).json({ error: "Erreur serveur" });
