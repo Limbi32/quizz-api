@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import axios from "axios";
-const bcrypt = require("bcryptjs");
+
 
 
 import { v4 as uuidv4 } from "uuid";
@@ -349,6 +349,82 @@ app.post("/api/admin/matieres", verifyAdmin, async (req, res) => {
     return res.status(500).json({ error: "Erreur serveur" });
   }
 });
+
+//Pour modifier une Matiere
+
+app.put("/api/admin/matieres/:id", verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nom } = req.body;
+
+    // Vérifier les données
+    if (!nom) {
+      return res.status(400).json({ error: "Le nom de la matière est requis" });
+    }
+
+    // Mise à jour
+    const { data, error } = await supabase
+      .from("matieres")
+      .update({ nom })
+      .eq("id", id)
+      .select();
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    // Si aucune ligne mise à jour → ID inexistant
+    if (!data || data.length === 0) {
+      return res.status(404).json({ error: "Matière introuvable" });
+    }
+
+    return res.status(200).json({
+      message: "Matière modifiée avec succès",
+      matiere: data[0],
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+//Pour supprimer une matiere
+
+app.delete("/api/admin/matieres/:id", verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Vérifier si la matière existe
+    const { data: existing, error: checkError } = await supabase
+      .from("matieres")
+      .select("id")
+      .eq("id", id)
+      .single();
+
+    if (checkError) {
+      return res.status(404).json({ error: "Matière introuvable" });
+    }
+
+    // Suppression
+    const { error } = await supabase
+      .from("matieres")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.status(200).json({ message: "Matière supprimée avec succès" });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+
 
 // ---------------- LISTE DES QUESTIONS PAR SUJET ----------------
 // ---------------- CRUD QUESTIONS PAR SUJET ----------------
