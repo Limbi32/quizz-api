@@ -113,6 +113,81 @@ app.get("/api/admin/users", verifyAdmin, async (req, res) => {
   }
 });
 
+app.post("/api/forgot-password", async (req, res) => {
+  const { phone } = req.body;
+
+  if (!phone) return res.status(400).json({ error: "Numéro de téléphone requis" });
+
+  try {
+    // Récupérer l'utilisateur correspondant au numéro
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("phone", phone)
+      .single();
+
+    if (error || !user) {
+      return res.status(404).json({ error: "Utilisateur non trouvé" });
+    }
+
+    // Générer un token temporaire pour réinitialisation
+    const resetToken = Math.random().toString(36).substring(2, 12); // simple exemple
+    const expires = new Date();
+    expires.setHours(expires.getHours() + 1); // token valide 1 heure
+
+    // Sauvegarder le token dans la table users ou une table password_resets
+    await supabase
+      .from("password_resets")
+      .insert({ user_id: user.id, token: resetToken, expires });
+
+    // Ici, tu peux envoyer le token par SMS ou email
+    console.log(`Token de réinitialisation pour ${phone}: ${resetToken}`);
+
+    return res.json({ message: "Token de réinitialisation envoyé" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+app.post("/api/reset-password", async (req, res) => {
+  const { token, newPassword } = req.body;
+
+  if (!token || !newPassword) return res.status(400).json({ error: "Token et mot de passe requis" });
+
+  try {
+    // Vérifier le token
+    const { data: reset, error } = await supabase
+      .from("password_resets")
+      .select("*")
+      .eq("token", token)
+      .single();
+
+    if (error || !reset) return res.status(400).json({ error: "Token invalide" });
+
+    // Vérifier si le token est expiré
+    if (new Date(reset.expires) < new Date()) {
+      return res.status(400).json({ error: "Token expiré" });
+    }
+
+    // Mettre à jour le mot de passe de l'utilisateur
+    await supabase
+      .from("users")
+      .update({ password: newPassword }) // idéalement hashé avec bcrypt
+      .eq("id", reset.user_id);
+
+    // Supprimer le token utilisé
+    await supabase.from("password_resets").delete().eq("token", token);
+
+    return res.json({ message: "Mot de passe réinitialisé avec succès" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+
+
 /// ===================== REGISTER / LOGIN =====================
 app.post("/api/register", async (req, res) => {
   try {
