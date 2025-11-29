@@ -151,41 +151,121 @@ app.post("/api/forgot-password", async (req, res) => {
 });
 
 app.post("/api/reset-password", async (req, res) => {
-  const { token, newPassword } = req.body;
+  const { phone, code, newPassword } = req.body;
 
-  if (!token || !newPassword) return res.status(400).json({ error: "Token et mot de passe requis" });
+  if (!phone || !code || !newPassword) {
+    return res.status(400).json({ error: "Tous les champs sont requis" });
+  }
 
   try {
-    // Vérifier le token
-    const { data: reset, error } = await supabase
+    // Vérifier code
+    const { data: reset } = await supabase
       .from("password_resets")
       .select("*")
-      .eq("token", token)
+      .eq("phone", phone)
+      .eq("code", code)
       .single();
 
-    if (error || !reset) return res.status(400).json({ error: "Token invalide" });
+    if (!reset) return res.status(400).json({ error: "Code incorrect" });
 
-    // Vérifier si le token est expiré
+    // Vérifier expiration
     if (new Date(reset.expires) < new Date()) {
-      return res.status(400).json({ error: "Token expiré" });
+      return res.status(400).json({ error: "Code expiré" });
     }
 
-    // Mettre à jour le mot de passe de l'utilisateur
+    // Mettre à jour le mot de passe (HASH CONSEILLÉ)
     await supabase
       .from("users")
-      .update({ password: newPassword }) // idéalement hashé avec bcrypt
+      .update({ password: newPassword })
       .eq("id", reset.user_id);
 
-    // Supprimer le token utilisé
-    await supabase.from("password_resets").delete().eq("token", token);
+    // Supprimer le code utilisé
+    await supabase
+      .from("password_resets")
+      .delete()
+      .eq("phone", phone);
 
     return res.json({ message: "Mot de passe réinitialisé avec succès" });
+
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
+
+app.post("/api/request-reset", async (req, res) => {
+  const { phone } = req.body;
+
+  if (!phone) return res.status(400).json({ error: "Numéro requis" });
+
+  try {
+    // Vérifier si l'utilisateur existe
+    const { data: user } = await supabase
+      .from("users")
+      .select("*")
+      .eq("phone", phone)
+      .single();
+
+    if (!user) return res.status(404).json({ error: "Numéro introuvable" });
+
+    // Générer un code à 6 chiffres
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Expiration dans 10 minutes
+    const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+    // Enregistrer dans la base
+    await supabase.from("password_resets").insert({
+      phone,
+      code,
+      expires,
+      user_id: user.id,
+    });
+
+    // Ici tu envoies le SMS
+    console.log("Code SMS envoyé :", code);
+
+    return res.json({ message: "Code envoyé par SMS" });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+
+// Supprimer un résultat
+app.delete("/api/admin/resultats/:id", verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Vérifier si le résultat existe
+    const { data: existing, error: checkError } = await supabase
+      .from("resultats")
+      .select("id")
+      .eq("id", id)
+      .single();
+
+    if (checkError || !existing) {
+      return res.status(404).json({ error: "Résultat introuvable" });
+    }
+
+    // Suppression
+    const { error } = await supabase
+      .from("resultats")
+      .delete()
+      .eq("id", id);
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    return res.status(200).json({ message: "Résultat supprimé avec succès" });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Erreur serveur" });
+  }
+});
 
 
 /// ===================== REGISTER / LOGIN =====================
