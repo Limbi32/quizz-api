@@ -232,15 +232,16 @@ app.post("/api/request-reset", async (req, res) => {
   }
 });
 
-
 // Supprimer un résultat
-app.delete("/api/admin/resultats/:id", verifyAdmin, async (req, res) => {
+app.delete("/api/admin/results/:id", verifyAdmin, async (req, res) => {
   try {
     const { id } = req.params;
 
+    console.log("Suppression résultat ID :", id);
+
     // Vérifier si le résultat existe
     const { data: existing, error: checkError } = await supabase
-      .from("resultats")
+      .from("quiz_results")
       .select("id")
       .eq("id", id)
       .single();
@@ -251,7 +252,7 @@ app.delete("/api/admin/resultats/:id", verifyAdmin, async (req, res) => {
 
     // Suppression
     const { error } = await supabase
-      .from("resultats")
+      .from("quiz_results")
       .delete()
       .eq("id", id);
 
@@ -260,7 +261,7 @@ app.delete("/api/admin/resultats/:id", verifyAdmin, async (req, res) => {
     return res.status(200).json({ message: "Résultat supprimé avec succès" });
 
   } catch (err) {
-    console.error(err);
+    console.error("Erreur API delete:", err);
     return res.status(500).json({ error: "Erreur serveur" });
   }
 });
