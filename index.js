@@ -151,39 +151,38 @@ app.post("/api/forgot-password", async (req, res) => {
 });
 
 app.post("/api/reset-password", async (req, res) => {
-  const { phone, code, newPassword } = req.body;
+  const { phone, nom, prenom, newPassword } = req.body;
 
-  if (!phone || !code || !newPassword) {
+  if (!phone || !nom || !prenom || !newPassword) {
     return res.status(400).json({ error: "Tous les champs sont requis" });
   }
 
   try {
-    // Vérifier code
-    const { data: reset } = await supabase
-      .from("password_resets")
+    // 1️⃣ Chercher l'utilisateur
+    const { data: user, error } = await supabase
+      .from("users")
       .select("*")
       .eq("phone", phone)
-      .eq("code", code)
+      .eq("nom", nom)
+      .eq("prenom", prenom)
       .single();
 
-    if (!reset) return res.status(400).json({ error: "Code incorrect" });
-
-    // Vérifier expiration
-    if (new Date(reset.expires) < new Date()) {
-      return res.status(400).json({ error: "Code expiré" });
+    if (!user) {
+      return res.status(400).json({ error: "Informations incorrectes" });
     }
 
-    // Mettre à jour le mot de passe (HASH CONSEILLÉ)
-    await supabase
-      .from("users")
-      .update({ password: newPassword })
-      .eq("id", reset.user_id);
+    // 2️⃣ Hacher le mot de passe (sécurité)
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Supprimer le code utilisé
-    await supabase
-      .from("password_resets")
-      .delete()
-      .eq("phone", phone);
+    // 3️⃣ Mettre à jour le mot de passe
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ password: hashedPassword })
+      .eq("id", user.id);
+
+    if (updateError) {
+      return res.status(500).json({ error: "Erreur lors de la mise à jour" });
+    }
 
     return res.json({ message: "Mot de passe réinitialisé avec succès" });
 
@@ -192,7 +191,6 @@ app.post("/api/reset-password", async (req, res) => {
     return res.status(500).json({ error: "Erreur serveur" });
   }
 });
-
 
 app.post("/api/request-reset", async (req, res) => {
   const { phone } = req.body;
